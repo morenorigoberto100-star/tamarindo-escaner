@@ -54,14 +54,28 @@ function start(){
  Quagga.init({
   inputStream:{
    name:"Live",type:"LiveStream",target:document.querySelector("#viewport"),
-   constraints:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080}},
+   constraints:{facingMode:{ideal:"environment"}},
    area:{top:"12%",right:"6%",left:"6%",bottom:"12%"}
   },
   locate:true, frequency:12,
   locator:{halfSample:false,patchSize:"small"},
   decoder:{readers:["code_128_reader","ean_reader","ean_8_reader","upc_reader","upc_e_reader"]}
  },err=>{
-  if(err){$("state").textContent="ERROR";alert("No se pudo abrir la cámara: "+err);return}
+  if(err){
+   $("state").textContent="REINTENTANDO";
+   try{Quagga.stop()}catch(e){}
+   Quagga.init({
+    inputStream:{name:"Live",type:"LiveStream",target:document.querySelector("#viewport"),
+      constraints:{facingMode:"environment"}},
+    locate:true,frequency:10,
+    locator:{halfSample:true,patchSize:"medium"},
+    decoder:{readers:["code_128_reader","ean_reader","ean_8_reader","upc_reader","upc_e_reader"]}
+   },err2=>{
+     if(err2){$("state").textContent="ERROR";alert("No se pudo iniciar la cámara Android: "+err2);return}
+     Quagga.start();running=true;$("state").textContent="BUSCANDO";
+   });
+   return;
+  }
   Quagga.start();running=true;$("state").textContent="BUSCANDO";
  });
 }
