@@ -36,7 +36,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 </style>
 </head>
 <body>
-<header><div class="brand"><span>tamarindo</span>®</div><div class="sub">Escáner móvil de inventarios · V4 ANDROID</div></header>
+<header><div class="brand"><span>tamarindo</span>®</div><div class="sub">Escáner móvil de inventarios · V5 ANDROID · VOZ</div></header>
 <main>
 <div id="envBanner" class="status" style="margin-bottom:12px"></div>
 <div class="tabs">
@@ -70,9 +70,10 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 <div class="actions">
 <button class="primary" id="scanBtn">📷 Iniciar escaneo continuo</button>
 <button class="soft" id="stopScanBtn">Detener cámara</button>
+<button class="soft" id="soundBtn">🔊 Sonido ON</button>
 </div>
 <div id="reader" class="hidden"></div>
-<div class="note" style="margin-top:8px">Android · modo continuo: cada lectura válida suma 1 y la cámara sigue lista. Solo se detiene cuando hay que elegir entre varias variantes. Para cantidades mayores usa la captura manual.</div>
+<div class="note" style="margin-top:8px">Android · modo continuo: lectura válida = beep. SKU incorrecto = aviso por voz. Si escaneas un SKU raíz con componentes, selecciona pieza COMPLETA o el guion correspondiente. La cámara continúa después de la selección.</div>
 <hr>
 <label>SKU completo o últimos 6 dígitos</label>
 <div class="actions"><input id="skuInput" inputmode="text" autocomplete="off" placeholder="Ej. 683765701407-2 o 701407"><button class="dark" id="findBtn">Buscar</button></div>
@@ -120,6 +121,42 @@ let catalog=JSON.parse(localStorage.getItem("tam_scan_catalog")||"null")||INITIA
 let current=JSON.parse(localStorage.getItem("tam_scan_v4_current")||"[]");
 let history=JSON.parse(localStorage.getItem("tam_scan_v4_history")||"[]");
 let selected=null, scanner=null, scanChoiceMode=false, lastScanText="", lastScanAt=0;
+let soundEnabled=localStorage.getItem("tam_scan_sound")!=="0";
+function speak(msg){
+ if(!soundEnabled||!("speechSynthesis" in window))return;
+ try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(msg);u.lang="es-MX";u.rate=1.05;u.volume=1;speechSynthesis.speak(u)}catch(e){}
+}
+function beep(){
+ if(!soundEnabled)return;
+ try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;const ac=new AC(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.value=1050;g.gain.setValueAtTime(.13,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.11);o.start();o.stop(ac.currentTime+.12);setTimeout(()=>ac.close(),250)}catch(e){}
+}
+function familyForSku(sku){
+ const n=norm(sku), root=n.split("-")[0];
+ const exactRoot=catalog.find(x=>norm(x.sku)===root);
+ const parts=catalog.filter(x=>{const z=norm(x.sku);return z.startsWith(root+"-")});
+ return {root,exactRoot,parts};
+}
+function showFamilyChoice(rootProd,parts){
+ scanChoiceMode=true;stopScan(false);speak("Selecciona pieza completa o componente");
+ const box=$("matches");box.innerHTML='<div class="status warn"><b>Producto con componentes.</b><br>Selecciona PIEZA COMPLETA o el guion contado.</div>';
+ let d=document.createElement("div");d.className="list";d.style.marginTop="10px";
+ [rootProd,...parts].forEach((x,i)=>{let b=document.createElement("button");b.className=i===0?"green":"soft";b.style.textAlign="left";b.innerHTML='<b>'+(i===0?'PIEZA COMPLETA · ':'')+escapeHtml(x.sku)+'</b><br><small>'+escapeHtml(x.desc)+'</small>';b.onclick=()=>{scanChoiceMode=false;box.innerHTML="";recordScan(x,1);setTimeout(startScan,250)};d.appendChild(b)});box.appendChild(d)
+}
+function handleScannedCode(txt){
+ const q=norm(txt), exact=catalog.find(x=>norm(x.sku)===q);
+ if(exact){
+   if(q.includes("-")){recordScan(exact,1);return}
+   const fam=familyForSku(q);
+   if(fam.parts.length){showFamilyChoice(exact,fam.parts);return}
+   recordScan(exact,1);return
+ }
+ let m=findSku(txt);
+ if(m.length===1){recordScan(m[0],1);return}
+ if(m.length>1){scanChoiceMode=true;stopScan(false);speak("Revisar SKU");showMatches(m,true);return}
+ $("skuInput").value=txt;$("matches").innerHTML='<div class="status bad">Código leído pero no encontrado: '+escapeHtml(txt)+'</div>';speak("SKU incorrecto")
+}
+function updateSoundBtn(){const b=$("soundBtn");if(b)b.textContent=soundEnabled?"🔊 Sonido ON":"🔇 Sonido OFF"}
+
 function save(){localStorage.setItem("tam_scan_v4_current",JSON.stringify(current));localStorage.setItem("tam_scan_v4_history",JSON.stringify(history))}
 function norm(v){return String(v??"").trim().toUpperCase()}
 function context(){
@@ -187,7 +224,7 @@ function nextOrder(){return current.reduce((m,x)=>Math.max(m,+x.orden||0),0)+1}
 function recordScan(prod,qty=1){
  if(!validContext())return;
  const c=context(), rec={...c,sku:String(prod.sku),descripcion:prod.desc,cantidad:qty,fecha:new Date().toISOString(),orden:nextOrder()};
- current.push(rec);save();renderCurrent();
+ current.push(rec);save();renderCurrent();beep();
  const lr=$("lastRead");lr.classList.remove("hidden");lr.textContent="✓ #"+rec.orden+" · "+rec.sku+" · +"+qty+" pza"+(qty===1?"":"s");
  lr.classList.remove("scanflash");void lr.offsetWidth;lr.classList.add("scanflash");
  if(navigator.vibrate)navigator.vibrate(60);
@@ -229,7 +266,7 @@ async function startScan(){
   scanner=scanner||new Html5Qrcode("reader");
   await scanner.start({facingMode:"environment"},{fps:12,qrbox:{width:250,height:160}},txt=>{
    const now=Date.now(),key=norm(txt);if(key===lastScanText&&now-lastScanAt<1200)return;lastScanText=key;lastScanAt=now;
-   let m=findSku(txt);if(m.length)showMatches(m,true);else{$("skuInput").value=txt;$("matches").innerHTML='<div class="status bad">Código leído pero no encontrado: '+escapeHtml(txt)+'</div>'}
+   handleScannedCode(txt)
   },()=>{});
  }catch(e){alert("No se pudo abrir la cámara. Confirma que estás en HTTPS y que Chrome tiene permiso de Cámara.");$("reader").classList.add("hidden")}
 }
@@ -286,6 +323,7 @@ $("skuInput").addEventListener("keydown",e=>{if(e.key==="Enter")showMatches(find
 $("addBtn").onclick=addProduct;$("finishBtn").onclick=finish;
 $("clearBtn").onclick=()=>{if(current.length&&confirm("¿Borrar el conteo actual?")){current=[];save();renderCurrent()}};
 $("scanBtn").onclick=startScan;$("stopScanBtn").onclick=()=>stopScan(true);
+$("soundBtn").onclick=()=>{soundEnabled=!soundEnabled;localStorage.setItem("tam_scan_sound",soundEnabled?"1":"0");updateSoundBtn();if(soundEnabled)beep()};updateSoundBtn();
 $("catalogFile").onchange=e=>{if(e.target.files[0])importCatalog(e.target.files[0])};
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");["count","history","catalog"].forEach(v=>$("view-"+v).classList.toggle("hidden",v!==b.dataset.view));if(b.dataset.view==="history")renderHistory()});
 changeOperation();loadAreas();toggleRack();renderCurrent();renderHistory();renderCatalog();
