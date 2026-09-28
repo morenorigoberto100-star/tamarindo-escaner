@@ -1,4 +1,4 @@
-const CACHE="tamarindo-escaner-v83";
+const CACHE="tamarindo-escaner-v84";
 
 const CORE=[
   "./",
@@ -33,22 +33,40 @@ self.addEventListener("activate",event=>{
   );
 });
 
-self.addEventListener("fetch",event=>{
-  if(event.request.method!=="GET") return;
+self.addEventListener("fetch", event => {
+  if (event.request.method !== "GET") return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached=>{
-      if(cached) return cached;
+  const req = event.request;
 
-      return fetch(event.request)
-        .then(resp=>{
-          const copy=resp.clone();
-          caches.open(CACHE)
-            .then(cache=>cache.put(event.request,copy))
-            .catch(()=>{});
+  // Para la página principal: primero Internet, después caché.
+  // Así siempre toma la versión nueva cuando hay conexión.
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then(resp => {
+          const copy = resp.clone();
+          caches.open(CACHE).then(cache => {
+            cache.put("./index.html", copy);
+          });
           return resp;
         })
-        .catch(()=>caches.match("./index.html"));
+        .catch(() =>
+          caches.match("./index.html").then(cached => cached || caches.match("./"))
+        )
+    );
+    return;
+  }
+
+  // Librerías y demás recursos: primero caché para conservar modo offline.
+  event.respondWith(
+    caches.match(req).then(cached => {
+      if (cached) return cached;
+
+      return fetch(req).then(resp => {
+        const copy = resp.clone();
+        caches.open(CACHE).then(cache => cache.put(req, copy)).catch(() => {});
+        return resp;
+      });
     })
   );
 });
