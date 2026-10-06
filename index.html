@@ -692,12 +692,12 @@ changeOperation();loadAreas();toggleRack();renderCurrent();renderHistory();rende
 #zxlast{font-size:17px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #zxdesc{font-size:12px;color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
 #zxtotal{font-size:14px;font-weight:900}
-#zxmsg{font-size:12px;color:#bbb;margin-top:7px}.zxactions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.zxactions button{background:#eee;color:#111}.zxactions button:disabled{opacity:.45}.zxchoice{position:absolute;z-index:30;left:5%;right:5%;bottom:5%;background:rgba(20,20,20,.96);border:2px solid #fff;border-radius:16px;padding:12px}.zxchoice.hidden{display:none}.zxchoice b{display:block;margin-bottom:8px}.zxchoice button{display:block;width:100%;margin-top:7px;background:#fff;color:#111;border:0;border-radius:10px;padding:11px;text-align:left;font-weight:800}
+#zxmsg{font-size:12px;color:#bbb;margin-top:7px}.zxactions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.zxactions button{background:#eee;color:#111}.zxactions button:disabled{opacity:.45}.zxchoice{position:absolute;z-index:30;left:5%;right:5%;bottom:5%;background:rgba(20,20,20,.96);border:2px solid #fff;border-radius:16px;padding:12px}.zxchoice.hidden{display:none}.zxchoice b{display:block;margin-bottom:8px}.zxchoice button{display:block;width:100%;margin-top:7px;background:#fff;color:#111;border:0;border-radius:10px;padding:11px;text-align:left;font-weight:800}
 @media(orientation:landscape){
  #zxview{height:calc(100vh - 154px);min-height:205px}
  #zxframe{left:18%;right:18%;top:20%;bottom:20%}
  #zxpanel{height:96px;padding:6px 9px}
- #zxmsg{display:none}.zxactions{margin-top:5px;grid-template-columns:1fr 1fr}.zxactions button{padding:7px;font-size:12px}
+ #zxmsg{display:none}.zxactions{margin-top:5px;grid-template-columns:repeat(3,1fr)}.zxactions button{padding:7px;font-size:12px}
  #zxlast{font-size:15px}
 }
 </style>
@@ -711,7 +711,7 @@ changeOperation();loadAreas();toggleRack();renderCurrent();renderHistory();rende
    <div class="zxpill"><div id="zxlast">Sin lectura</div><div id="zxdesc">—</div></div>
    <div class="zxpill" style="flex:0 0 auto"><div id="zxtotal">0 piezas</div></div>
   </div>
-  <div class="zxactions"><button id="zxmanual">✍️ Cantidad manual</button><button id="zxreview">📋 Revisar conteo</button></div><div id="zxmsg">Solo aumenta cuando el código se valida contra el catálogo.</div>
+  <div class="zxactions"><button id="zxtorch">🔦 Luz</button><button id="zxmanual">✍️ Cantidad manual</button><button id="zxreview">📋 Revisar conteo</button></div><div id="zxmsg">Solo aumenta cuando el código se valida contra el catálogo.</div>
  </div>
 </div>
 
@@ -848,20 +848,21 @@ toggleTorch=async function(){
  try{
   if(typeof zxControls.switchTorch==="function"){
     await zxControls.switchTorch();zxTorch=!zxTorch;
-    zxEl("zxtorch").textContent=zxTorch?"🔦 ON":"🔦";return;
+    zxEl("zxtorch").textContent=zxTorch?"🔦 Luz ON":"🔦 Luz";return;
   }
   const v=zxEl("zxvideo"),track=v&&v.srcObject&&v.srcObject.getVideoTracks?v.srcObject.getVideoTracks()[0]:null;
   const caps=track&&track.getCapabilities?track.getCapabilities():{};
   if(!track||!caps.torch)throw new Error("NO_TORCH");
   zxTorch=!zxTorch;await track.applyConstraints({advanced:[{torch:zxTorch}]});
-  zxEl("zxtorch").textContent=zxTorch?"🔦 ON":"🔦";
+  zxEl("zxtorch").textContent=zxTorch?"🔦 Luz ON":"🔦 Luz";
  }catch(e){
-  zxTorch=false;zxEl("zxtorch").textContent="🔦";
+  zxTorch=false;zxEl("zxtorch").textContent="🔦 Luz";
   alert("La linterna no está disponible desde el navegador en este teléfono.");
  }
 };
 
 zxEl("zxstop").onclick=()=>{zxHideChoice();stopScan(true)};
+zxEl("zxtorch").onclick=()=>toggleTorch();
 
 zxEl("zxmanual").onclick=()=>{if(!current.length)return alert("Primero escanea un SKU.");openManualLast()};
 zxEl("zxreview").onclick=()=>openReview();
