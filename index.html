@@ -637,36 +637,12 @@ $("manualLastBtn").onclick=openManualLast;$("manualCancel").onclick=()=>$("manua
 openReview=function(){const box=$("reviewBody");box.innerHTML="";current.slice().sort((a,b)=>(+b.orden||0)-(+a.orden||0)).forEach(r=>{const idx=current.indexOf(r),d=document.createElement("div");d.className="review-edit";d.innerHTML='<div><b>#'+r.orden+' · '+escapeHtml(r.sku)+'</b><br><small>'+escapeHtml(r.descripcion)+'</small><br><small>'+(r.tipoCaptura||"ESCÁNER")+'</small></div><input type="number" min="1" step="1" value="'+(+r.cantidad||1)+'" data-edit="'+idx+'"><button class="soft" data-del="'+idx+'">🗑️</button>';box.appendChild(d)});if(!current.length)box.innerHTML='<div class="status">Todavía no hay capturas.</div>';box.querySelectorAll('[data-edit]').forEach(el=>el.onchange=()=>{const i=+el.dataset.edit;if(current[i]){current[i].cantidad=Math.max(1,parseInt(el.value||"1",10));current[i].tipoCaptura="CORREGIDO";save();renderCurrent()}});box.querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{const i=+el.dataset.del;if(current[i]&&confirm("¿Eliminar esta captura?")){current.splice(i,1);save();renderCurrent();openReview()}});$("reviewModal").classList.remove("hidden")};
 $("reviewBtn").onclick=openReview;
 
-function tiendaCaptureFilename(h){
- const x=(h.registros||[])[0]||{};
- return ["CAPTURA-TIENDA",h.tienda||x.tienda||"TIENDA",h.tipoTienda||x.tipoTienda||"CONTEO",h.contador||x.contador||""].map(safeFile).filter(Boolean).join("_")+".xlsx";
-}
-function downloadTiendaCapture(i){
- const h=history[i];
- if(h.operacion!=="TIENDA")return alert("Este archivo aplica únicamente a conteos de Tienda.");
- if(typeof XLSX==="undefined")return alert("Para generar Excel abre la aplicación con conexión a internet.");
- const agg=new Map();
- (h.registros||[]).forEach(x=>{
-   const k=norm(x.sku);
-   let a=agg.get(k);
-   if(!a){a={SKU:String(x.sku),Descripción:x.descripcion,Cantidad:0};agg.set(k,a)}
-   a.Cantidad+=(+x.cantidad||0);
- });
- const data=[...agg.values()];
- const ws=XLSX.utils.json_to_sheet(data,{header:["SKU","Descripción","Cantidad"]});
- ws["!cols"]=[{wch:20},{wch:52},{wch:12}];
- Object.keys(ws).forEach(a=>{if(/^A\d+$/.test(a)&&a!=="A1"){ws[a].t="s";ws[a].v=String(ws[a].v)}});
- const wb=XLSX.utils.book_new();
- XLSX.utils.book_append_sheet(wb,ws,"Captura");
- XLSX.writeFile(wb,tiendaCaptureFilename(h));
-}
-
 function historyData(h){return h.registros.slice().sort((a,b)=>(+a.orden||0)-(+b.orden||0)).map(x=>({"Orden":x.orden,"Tipo de captura":x.tipoCaptura||"ESCÁNER","Operación":x.operacion,"CEDIS":x.cedis,"Tienda":x.tienda,"Conteo tienda":x.tipoTienda,"Contador":x.contador,"Área CEDIS":x.area,"Ubicación tienda":x.ubicTienda==="Otra ubicación"?x.otraUbic:x.ubicTienda,"Pasillo":x.pasillo,"Lado":x.lado,"Ubicación exacta":x.ref,"Observaciones":x.obs,"SKU":String(x.sku),"Descripción":x.descripcion,"Cantidad":x.cantidad,"Fecha/Hora":new Date(x.fecha).toLocaleString("es-MX")}))}
 function workbookBlob(h){if(typeof XLSX==="undefined")throw new Error("XLSX");const ws=XLSX.utils.json_to_sheet(historyData(h));ws["!cols"]=[8,16,12,12,20,16,20,22,22,10,12,20,24,20,48,10,22].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Secuencia conteo");const arr=XLSX.write(wb,{bookType:"xlsx",type:"array"});return new Blob([arr],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})}
 function downloadHistory(i){const h=history[i];try{const blob=workbookBlob(h),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=h.folio+".xlsx";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500)}catch(e){alert("No se pudo generar el Excel. Revisa la conexión de la aplicación.")}}
 async function shareHistory(i){const h=history[i],blob=workbookBlob(h),file=new File([blob],h.folio+".xlsx",{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});try{if(navigator.share){if(!navigator.canShare||navigator.canShare({files:[file]})){await navigator.share({files:[file],title:h.folio,text:"Conteo de inventario tamarindo"});return}}}catch(e){if(e&&e.name==="AbortError")return}downloadHistory(i);setTimeout(()=>alert("Este navegador no pudo entregar el Excel al menú Compartir. El archivo quedó descargado; ábrelo desde Descargas y elige Compartir para enviarlo por Outlook, Gmail, WhatsApp o Drive."),250)}
 exportHistory=downloadHistory;
-renderHistory=function(){const box=$("historyList");box.innerHTML="";if(!history.length){box.innerHTML='<div class="status">Todavía no hay conteos finalizados.</div>';return}history.forEach((h,i)=>{let p=h.registros.reduce((a,x)=>a+(+x.cantidad||0),0),loc=h.operacion==="TIENDA"?(h.tienda+" · "+h.tipoTienda):h.cedis,d=document.createElement("div");d.className="row";const buttons=h.operacion==="CEDIS"?'<div class="actions"><button class="primary" data-cap="'+i+'">Captura CEDIS</button><button class="soft" data-down="'+i+'">Historial</button></div>':'<div class="actions"><button class="primary" data-tienda-cap="'+i+'">Captura Tienda</button><button class="soft" data-down="'+i+'">Historial</button></div>';d.innerHTML='<div><b>'+escapeHtml(h.folio)+'</b><br><small>'+escapeHtml(loc+" · "+h.contador)+'</small><br><small>'+new Date(h.finalizado).toLocaleString("es-MX")+' · '+h.registros.length+' registros · '+p+' piezas</small></div>'+buttons;box.appendChild(d)});box.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>downloadHistory(+b.dataset.down));box.querySelectorAll('[data-cap]').forEach(b=>b.onclick=()=>downloadCedisCapture(+b.dataset.cap));box.querySelectorAll('[data-tienda-cap]').forEach(b=>b.onclick=()=>downloadTiendaCapture(+b.dataset.tiendaCap))};
+renderHistory=function(){const box=$("historyList");box.innerHTML="";if(!history.length){box.innerHTML='<div class="status">Todavía no hay conteos finalizados.</div>';return}history.forEach((h,i)=>{let p=h.registros.reduce((a,x)=>a+(+x.cantidad||0),0),loc=h.operacion==="TIENDA"?(h.tienda+" · "+h.tipoTienda):h.cedis,d=document.createElement("div");d.className="row";const buttons=h.operacion==="CEDIS"?'<div class="actions"><button class="primary" data-cap="'+i+'">Captura CEDIS</button><button class="soft" data-down="'+i+'">Historial</button></div>':'<div class="actions"><button class="primary" data-down="'+i+'">Descargar Excel</button></div>';d.innerHTML='<div><b>'+escapeHtml(h.folio)+'</b><br><small>'+escapeHtml(loc+" · "+h.contador)+'</small><br><small>'+new Date(h.finalizado).toLocaleString("es-MX")+' · '+h.registros.length+' registros · '+p+' piezas</small></div>'+buttons;box.appendChild(d)});box.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>downloadHistory(+b.dataset.down));box.querySelectorAll('[data-cap]').forEach(b=>b.onclick=()=>downloadCedisCapture(+b.dataset.cap))};
 finish=function(){if(!current.length)return alert("No hay registros en el conteo actual.");const first=current[0],who=first.operacion==="TIENDA"?first.tienda+"-"+first.tipoTienda:first.cedis,folio="ESC-"+who.replace(/\s+/g,"_")+"-"+Date.now();history.unshift({folio,finalizado:new Date().toISOString(),operacion:first.operacion,cedis:first.cedis,tienda:first.tienda,tipoTienda:first.tipoTienda,contador:first.contador,registros:current.map(x=>({...x}))});current=[];save();renderCurrent();if($("lastRead")){$("lastRead").textContent="";$("lastRead").classList.add("hidden")};renderHistory();lastFinishedIndex=0;$("finishInfo").textContent=folio+" · guardado en Historial. El nuevo conteo inicia en cero.";$("finishModal").classList.remove("hidden")};
 $("finishBtn").onclick=finish;$("finishClose").onclick=()=>$("finishModal").classList.add("hidden");
 
@@ -692,12 +668,12 @@ changeOperation();loadAreas();toggleRack();renderCurrent();renderHistory();rende
 #zxlast{font-size:17px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #zxdesc{font-size:12px;color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
 #zxtotal{font-size:14px;font-weight:900}
-#zxmsg{font-size:12px;color:#bbb;margin-top:7px}.zxactions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.zxactions button{background:#eee;color:#111}.zxactions button:disabled{opacity:.45}.zxchoice{position:absolute;z-index:30;left:5%;right:5%;bottom:5%;background:rgba(20,20,20,.96);border:2px solid #fff;border-radius:16px;padding:12px}.zxchoice.hidden{display:none}.zxchoice b{display:block;margin-bottom:8px}.zxchoice button{display:block;width:100%;margin-top:7px;background:#fff;color:#111;border:0;border-radius:10px;padding:11px;text-align:left;font-weight:800}
+#zxmsg{font-size:12px;color:#bbb;margin-top:7px}.zxactions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.zxactions button{background:#eee;color:#111}.zxactions button:disabled{opacity:.45}.zxchoice{position:absolute;z-index:30;left:5%;right:5%;bottom:5%;background:rgba(20,20,20,.96);border:2px solid #fff;border-radius:16px;padding:12px}.zxchoice.hidden{display:none}.zxchoice b{display:block;margin-bottom:8px}.zxchoice button{display:block;width:100%;margin-top:7px;background:#fff;color:#111;border:0;border-radius:10px;padding:11px;text-align:left;font-weight:800}
 @media(orientation:landscape){
  #zxview{height:calc(100vh - 154px);min-height:205px}
  #zxframe{left:18%;right:18%;top:20%;bottom:20%}
  #zxpanel{height:96px;padding:6px 9px}
- #zxmsg{display:none}.zxactions{margin-top:5px;grid-template-columns:repeat(3,1fr)}.zxactions button{padding:7px;font-size:12px}
+ #zxmsg{display:none}.zxactions{margin-top:5px;grid-template-columns:1fr 1fr}.zxactions button{padding:7px;font-size:12px}
  #zxlast{font-size:15px}
 }
 </style>
@@ -711,7 +687,7 @@ changeOperation();loadAreas();toggleRack();renderCurrent();renderHistory();rende
    <div class="zxpill"><div id="zxlast">Sin lectura</div><div id="zxdesc">—</div></div>
    <div class="zxpill" style="flex:0 0 auto"><div id="zxtotal">0 piezas</div></div>
   </div>
-  <div class="zxactions"><button id="zxtorch">🔦 Luz</button><button id="zxmanual">✍️ Cantidad manual</button><button id="zxreview">📋 Revisar conteo</button></div><div id="zxmsg">Solo aumenta cuando el código se valida contra el catálogo.</div>
+  <div class="zxactions"><button id="zxmanual">✍️ Cantidad manual</button><button id="zxreview">📋 Revisar conteo</button></div><div id="zxmsg">Solo aumenta cuando el código se valida contra el catálogo.</div>
  </div>
 </div>
 
@@ -848,21 +824,20 @@ toggleTorch=async function(){
  try{
   if(typeof zxControls.switchTorch==="function"){
     await zxControls.switchTorch();zxTorch=!zxTorch;
-    zxEl("zxtorch").textContent=zxTorch?"🔦 Luz ON":"🔦 Luz";return;
+    zxEl("zxtorch").textContent=zxTorch?"🔦 ON":"🔦";return;
   }
   const v=zxEl("zxvideo"),track=v&&v.srcObject&&v.srcObject.getVideoTracks?v.srcObject.getVideoTracks()[0]:null;
   const caps=track&&track.getCapabilities?track.getCapabilities():{};
   if(!track||!caps.torch)throw new Error("NO_TORCH");
   zxTorch=!zxTorch;await track.applyConstraints({advanced:[{torch:zxTorch}]});
-  zxEl("zxtorch").textContent=zxTorch?"🔦 Luz ON":"🔦 Luz";
+  zxEl("zxtorch").textContent=zxTorch?"🔦 ON":"🔦";
  }catch(e){
-  zxTorch=false;zxEl("zxtorch").textContent="🔦 Luz";
+  zxTorch=false;zxEl("zxtorch").textContent="🔦";
   alert("La linterna no está disponible desde el navegador en este teléfono.");
  }
 };
 
 zxEl("zxstop").onclick=()=>{zxHideChoice();stopScan(true)};
-zxEl("zxtorch").onclick=()=>toggleTorch();
 
 zxEl("zxmanual").onclick=()=>{if(!current.length)return alert("Primero escanea un SKU.");openManualLast()};
 zxEl("zxreview").onclick=()=>openReview();
